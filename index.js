@@ -36,9 +36,12 @@ app.post(
           ]);
         }
       }
-    } catch (err) {
-      console.error("handler error:", err?.body || err);
-    }
+   } catch (err) {
+  console.error("handler error status:", err?.status);
+  console.error("handler error body:", err?.body);
+  console.error("handler error raw:", err);
+}
+
   }
 );
 
