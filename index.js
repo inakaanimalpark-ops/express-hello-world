@@ -10,6 +10,10 @@ const config = {
 
 const client = new line.Client(config);
 
+// Render疎通確認
+app.get("/", (req, res) => res.status(200).send("LINE webhook server is running."));
+
+// Webhook
 app.post(
   "/webhook",
   (req, res, next) => {
@@ -18,42 +22,25 @@ app.post(
   },
   line.middleware(config),
   async (req, res) => {
+    // LINEには即200を返す（タイムアウト回避）
     res.status(200).send("OK");
-    // ここから先は非同期でOK（返信処理など）
-  }
-);
 
-  (async () => {
     try {
+      const events = req.body?.events || [];
+      console.log("events length:", events.length);
+
       for (const event of events) {
         if (event.type === "message" && event.message?.type === "text") {
           await client.replyMessage(event.replyToken, [
-  {
-    type: "text",
-    text: `受信OK: ${event.message.text}`,
-  },
-]);
-
+            { type: "text", text: `受信OK: ${event.message.text}` },
+          ]);
         }
       }
     } catch (err) {
-      console.error("async handler error:", err?.body || err);
+      console.error("handler error:", err?.body || err);
     }
-  })();
-});
-
-
-    // ✅ ここで必ず200
-    return res.status(200).send("OK");
-  } catch (err) {
-    console.error("reply failed:", err?.body || err);
-    // ✅ 失敗しても200（LINE再送地獄回避）
-    return res.status(200).send("OK");
   }
-});
-
-// Render疎通確認
-app.get("/", (req, res) => res.status(200).send("LINE webhook server is running."));
+);
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => console.log("listening on", port));
