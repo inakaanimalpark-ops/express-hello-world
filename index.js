@@ -3,46 +3,48 @@ const line = require("@line/bot-sdk");
 
 const app = express();
 
-const config = {
-  channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN,
-  channelSecret: process.env.LINE_CHANNEL_SECRET,
-};
+const channelAccessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+const channelSecret = process.env.LINE_CHANNEL_SECRET;
 
-const client = new line.Client(config);
+// ✅ MessagingApiClient を使う
+const client = new line.messagingApi.MessagingApiClient({ channelAccessToken });
 
-// Render疎通確認
-app.get("/", (req, res) => res.status(200).send("LINE webhook server is running."));
+// ✅ 署名検証 middleware は channelSecret
+app.post("/webhook", line.middleware({ channelSecret }), async (req, res) => {
+  // 先に200（タイムアウト回避）
+  res.status(200).send("OK");
 
-// Webhook
-app.post(
-  "/webhook",
-  (req, res, next) => {
-    console.log(">>> HIT /webhook (before signature check)");
-    next();
-  },
-  line.middleware(config),
-  async (req, res) => {
-    // LINEには即200を返す（タイムアウト回避）
-    res.status(200).send("OK");
+  try {
+    const events = req.body?.events || [];
+    console.log("events length:", events.length);
 
-    try {
-      const events = req.body?.events || [];
-      console.log("events length:", events.length);
+    for (const event of events) {
+      console.log("event.type:", event.type);
+      console.log("replyToken:", event.replyToken);
 
-      for (const event of events) {
-        if (event.type === "message" && event.message?.type === "text") {
-          await client.replyMessage(event.replyToken, [
-            { type: "text", text: `受信OK: ${event.message.text}` },
-          ]);
-        }
+      if (event.type === "message" && event.message?.type === "text") {
+        // ✅ MessagingApiClient の正しい呼び方
+        await client.replyMessage({
+          replyToken: event.replyToken,
+          messages: [
+            {
+              type: "text",
+              text: `受信OK: ${event.message.text}`,
+            },
+          ],
+        });
+        console.log("reply done");
       }
-   } catch (err) {
-  console.error("handler error status:", err?.status);
-  console.error("handler error body:", err?.body);
-  console.error("handler error raw:", err);
-}
-
+    }
+  } catch (err) {
+    console.error("handler error status:", err?.status);
+    console.error("handler error body:", err?.body);
+    console.error("handler error raw:", err);
   }
+});
+
+app.get("/", (req, res) =>
+  res.status(200).send("LINE webhook server is running.")
 );
 
 const port = process.env.PORT || 3000;
