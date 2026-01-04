@@ -19,17 +19,23 @@ app.post("/webhook", line.middleware(config), async (req, res) => {
     for (const event of events) {
       if (event.type === "message" && event.message && event.message.type === "text") {
         await client.replyMessage(event.replyToken, {
-          type: "text",
-          text: `受信OK: ${event.message.text}`,
-        });
+  messages: [
+    {
+      type: "text",
+      text: `受信OK: ${event.message.text}`,
+    },
+  ],
+});
+
       }
     }
 
     res.status(200).send("OK");
   } catch (err) {
-    console.error("webhook handler error:", err);
-    res.status(200).send("OK");
-  }
+  console.error("reply failed:", err);
+  res.status(200).send("OK");
+}
+
 });
 
 // Render疎通確認
