@@ -2,40 +2,25 @@ const express = require("express");
 const line = require("@line/bot-sdk");
 
 const app = express();
+console.log("=== VER1.5 FINAL ===");
 
-console.log("=== VER1 FINAL STABLE ===");
-
-const channelSecret = (process.env.LINE_CHANNEL_SECRET || "").trim();
-const channelAccessToken = (process.env.LINE_CHANNEL_ACCESS_TOKEN || "").trim();
+const channelSecret = process.env.LINE_CHANNEL_SECRET;
+const channelAccessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
 
 // ===== メモリDB =====
-const userStateMap = new Map();
-
-function getUserId(event) {
-  return event?.source?.userId;
-}
+const userState = new Map();
 
 function resetUser(userId) {
-  userStateMap.set(userId, { step: "WAIT_GENDER", birth: {} });
+  userState.set(userId, { step: "WAIT_GENDER", birth: {} });
 }
 
-// ===== 日付 =====
-function isValidBirth(y, m, d) {
-  const dt = new Date(y, m - 1, d);
-  return (
-    dt.getFullYear() === y &&
-    dt.getMonth() + 1 === m &&
-    dt.getDate() === d
-  );
+function daysInMonth(y, m) {
+  return new Date(y, m, 0).getDate();
 }
 
-function daysInMonth(year, month) {
-  return new Date(year, month, 0).getDate();
-}
-
-// ===== LINE返信 =====
+// ===== LINE reply =====
 async function reply(replyToken, messages) {
-  const res = await fetch("https://api.line.me/v2/bot/message/reply", {
+  await fetch("https://api.line.me/v2/bot/message/reply", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -43,32 +28,42 @@ async function reply(replyToken, messages) {
     },
     body: JSON.stringify({ replyToken, messages }),
   });
-
-  if (!res.ok) {
-    console.error("LINE ERROR:", await res.text());
-  }
 }
 
-// ===== クイックリプライ =====
-function quickGender() {
-  return {
-    items: ["男性", "女性", "その他"].map(v => ({
-      type: "action",
-      action: { type: "message", label: v, text: v },
-    })),
-  };
-}
+// ===== QuickReplies =====
+const qrGender = {
+  items: ["男性", "女性", "その他"].map(v => ({
+    type: "action",
+    action: { type: "message", label: v, text: v },
+  })),
+};
 
-function quickYears(start) {
+const qrEra = {
+  items: [
+    { label: "1970年代", text: "ERA:1970" },
+    { label: "1980年代", text: "ERA:1980" },
+    { label: "1990年代", text: "ERA:1990" },
+    { label: "2000年代", text: "ERA:2000" },
+    { label: "2010年代", text: "ERA:2010" },
+  ].map(v => ({
+    type: "action",
+    action: { type: "message", label: v.label, text: v.text },
+  })),
+};
+
+function qrYears(start) {
   return {
     items: Array.from({ length: 10 }, (_, i) => {
       const y = start + i;
-      return { type: "action", action: { type: "message", label: `${y}`, text: `Y:${y}` } };
+      return {
+        type: "action",
+        action: { type: "message", label: `${y}`, text: `Y:${y}` },
+      };
     }),
   };
 }
 
-function quickMonths() {
+function qrMonths() {
   return {
     items: Array.from({ length: 12 }, (_, i) => {
       const m = i + 1;
@@ -80,7 +75,7 @@ function quickMonths() {
   };
 }
 
-function quickDays(max) {
+function qrDays(max) {
   return {
     items: Array.from({ length: Math.min(12, max) }, (_, i) => {
       const d = i + 1;
@@ -92,138 +87,137 @@ function quickDays(max) {
   };
 }
 
-// ===== テンプレ =====
-function freeParts({ gender, birth }) {
+const qrNext = {
+  items: [{ type: "action", action: { type: "message", label: "次へ", text: "次へ" } }],
+};
+
+// ===== 無料鑑定 =====
+function freeParts(gender, birth) {
   return [
-    `無料鑑定を始めます。\n\n性別：${gender}\n生年月日：${birth}`,
-    `あなたは芯が強く、流されにくいタイプです。`,
-    `最近は少し無理をしがち。\n自分の本音を大切に。`,
-    `無料鑑定はここまでです。`,
+    `無料鑑定を始めます。\n性別：${gender}\n生年月日：${birth}`,
+    `あなたは芯が強く、周囲に流されにくい方です。`,
+    `最近は気を使いすぎて少し疲れ気味のようです。`,
+    `無料鑑定は以上です。`,
   ];
 }
 
-// ===== 疎通 =====
-app.get("/", (_, res) => res.send("VER1 OK"));
+// ===== Routes =====
+app.get("/", (_, res) => res.send("VER1.5 OK"));
 
-// ===== Webhook =====
 app.post("/webhook", line.middleware({ channelSecret }), async (req, res) => {
   res.send("OK");
 
-  for (const event of req.body.events || []) {
-    const replyToken = event.replyToken;
-    const userId = getUserId(event);
-    if (!replyToken || !userId) continue;
+  for (const e of req.body.events || []) {
+    const userId = e.source?.userId;
+    const replyToken = e.replyToken;
+    if (!userId || !replyToken) continue;
 
-    if (event.type === "follow") {
+    if (e.type === "follow") {
       resetUser(userId);
       await reply(replyToken, [{
         type: "text",
-        text: "友だち追加ありがとうございます。\n性別を教えてください。",
-        quickReply: quickGender(),
+        text: "ようこそ。性別を教えてください。",
+        quickReply: qrGender,
       }]);
       continue;
     }
 
-    if (event.type !== "message" || event.message.type !== "text") continue;
+    if (e.type !== "message" || e.message.type !== "text") continue;
 
-    const text = event.message.text.trim();
-    if (!userStateMap.has(userId)) resetUser(userId);
-    const st = userStateMap.get(userId);
+    const text = e.message.text.trim();
+    const st = userState.get(userId) || resetUser(userId) || userState.get(userId);
 
     if (text === "最初から") {
       resetUser(userId);
       await reply(replyToken, [{
         type: "text",
-        text: "最初から始めます。\n性別を教えてください。",
-        quickReply: quickGender(),
+        text: "最初から始めます。性別を教えてください。",
+        quickReply: qrGender,
       }]);
       continue;
     }
 
-    // 性別
     if (st.step === "WAIT_GENDER") {
-      if (!["男性", "女性", "その他"].includes(text)) {
-        await reply(replyToken, [{
-          type: "text",
-          text: "性別を選んでください。",
-          quickReply: quickGender(),
-        }]);
-        continue;
-      }
       st.gender = text;
+      st.step = "WAIT_ERA";
+      await reply(replyToken, [{
+        type: "text",
+        text: "生まれた年代を選んでください。",
+        quickReply: qrEra,
+      }]);
+      continue;
+    }
+
+    if (st.step === "WAIT_ERA" && text.startsWith("ERA:")) {
+      st.era = Number(text.split(":")[1]);
       st.step = "WAIT_YEAR";
       await reply(replyToken, [{
         type: "text",
-        text: "生まれた年を選んでください（1990〜1999など）",
-        quickReply: quickYears(1990),
+        text: "年を選んでください。",
+        quickReply: qrYears(st.era),
       }]);
       continue;
     }
 
-    // 年
     if (st.step === "WAIT_YEAR" && text.startsWith("Y:")) {
       st.birth.year = Number(text.slice(2));
       st.step = "WAIT_MONTH";
       await reply(replyToken, [{
         type: "text",
         text: "月を選んでください。",
-        quickReply: quickMonths(),
+        quickReply: qrMonths(),
       }]);
       continue;
     }
 
-    // 月
     if (st.step === "WAIT_MONTH" && text.startsWith("M:")) {
       st.birth.month = Number(text.slice(2));
       st.step = "WAIT_DAY";
-      const max = daysInMonth(st.birth.year, st.birth.month);
       await reply(replyToken, [{
         type: "text",
-        text: "日を選んでください（13〜31はそのまま数字入力OK）",
-        quickReply: quickDays(max),
+        text: "日を選んでください（13〜31は直接入力OK）",
+        quickReply: qrDays(daysInMonth(st.birth.year, st.birth.month)),
       }]);
       continue;
     }
 
-    // 日（ボタン or 直接入力）
     if (st.step === "WAIT_DAY") {
-      let day = null;
-      if (text.startsWith("D:")) day = Number(text.slice(2));
-      else if (/^\d{1,2}$/.test(text)) day = Number(text);
-
+      let day = text.startsWith("D:") ? Number(text.slice(2)) : Number(text);
       const max = daysInMonth(st.birth.year, st.birth.month);
+
       if (!day || day < 1 || day > max) {
-        await reply(replyToken, [{ type: "text", text: `1〜${max} の数字を入力してください。` }]);
+        await reply(replyToken, [{ type: "text", text: `1〜${max}で入力してください。` }]);
         continue;
       }
 
-      const birth = `${st.birth.year}-${String(st.birth.month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-      st.birth = birth;
+      st.birth.full = `${st.birth.year}-${String(st.birth.month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
       st.step = "FREE_0";
+      st.free = freeParts(st.gender, st.birth.full);
 
-      const parts = freeParts({ gender: st.gender, birth });
       await reply(replyToken, [{
         type: "text",
-        text: parts[0],
-        quickReply: { items: [{ type: "action", action: { type: "message", label: "次へ", text: "次へ" } }] },
+        text: st.free[0],
+        quickReply: qrNext,
       }]);
       continue;
     }
 
-    // 無料鑑定
     if (st.step.startsWith("FREE_")) {
       const idx = Number(st.step.split("_")[1]);
       if (text !== "次へ") continue;
 
-      if (idx + 1 >= freeParts({}).length) {
+      if (idx + 1 >= st.free.length) {
         st.step = "DONE";
-        await reply(replyToken, [{ type: "text", text: "無料鑑定は以上です。" }]);
+        await reply(replyToken, [{
+          type: "text",
+          text: "ここから先は有料鑑定となります。\n（現在準備中です）\n\n「最初から」で再度体験できます。",
+        }]);
       } else {
         st.step = `FREE_${idx + 1}`;
         await reply(replyToken, [{
           type: "text",
-          text: freeParts({ gender: st.gender, birth: st.birth })[idx + 1],
-          quickReply: { items: [{ type: "action", action: { type: "message", label: "次へ", text: "次へ" } }] },
+          text: st.free[idx + 1],
+          quickReply: qrNext,
         }]);
       }
     }
