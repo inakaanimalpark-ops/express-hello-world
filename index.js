@@ -1,21 +1,14 @@
-const express = require("express");console.log("=== VER1 CODE ACTIVE 2026-01-04 21:xx ===");
-app.get("/", (req, res) => res.status(200).send("VER1 ACTIVE 2026-01-04"));
-
+const express = require("express");
 const line = require("@line/bot-sdk");
 
 const app = express();
+
+console.log("=== VER1 CODE ACTIVE 2026-01-04 ===");
 
 const channelSecret = (process.env.LINE_CHANNEL_SECRET || "").trim();
 const channelAccessToken = (process.env.LINE_CHANNEL_ACCESS_TOKEN || "").trim();
 
 // ---- 超簡易DB（メモリ） ----
-/**
- * userStateMap[userId] = {
- *   step: "WAIT_GENDER" | "WAIT_BIRTH" | "FREE_0" | "FREE_1" | "FREE_2" | "FREE_3" | "DONE",
- *   gender: "男性" | "女性" | "その他",
- *   birth: "YYYY-MM-DD"
- * }
- */
 const userStateMap = new Map();
 
 function getUserId(event) {
@@ -27,19 +20,13 @@ function resetUser(userId) {
 }
 
 function isValidBirth(s) {
-  // 例: 1990-01-31
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
   const [y, m, d] = s.split("-").map(Number);
   if (y < 1900 || y > 2100) return false;
   if (m < 1 || m > 12) return false;
   if (d < 1 || d > 31) return false;
   const dt = new Date(`${s}T00:00:00`);
-  // Dateの自動補正でズレるケース排除
-  return (
-    dt.getFullYear() === y &&
-    dt.getMonth() + 1 === m &&
-    dt.getDate() === d
-  );
+  return dt.getFullYear() === y && dt.getMonth() + 1 === m && dt.getDate() === d;
 }
 
 // ---- LINE Reply API 直投げ ----
@@ -62,18 +49,9 @@ async function reply(replyToken, messages) {
 function quickReplyGender() {
   return {
     items: [
-      {
-        type: "action",
-        action: { type: "message", label: "男性", text: "男性" },
-      },
-      {
-        type: "action",
-        action: { type: "message", label: "女性", text: "女性" },
-      },
-      {
-        type: "action",
-        action: { type: "message", label: "その他", text: "その他" },
-      },
+      { type: "action", action: { type: "message", label: "男性", text: "男性" } },
+      { type: "action", action: { type: "message", label: "女性", text: "女性" } },
+      { type: "action", action: { type: "message", label: "その他", text: "その他" } },
     ],
   };
 }
@@ -81,19 +59,12 @@ function quickReplyGender() {
 function quickReplyNext() {
   return {
     items: [
-      {
-        type: "action",
-        action: { type: "message", label: "次へ", text: "次へ" },
-      },
-      {
-        type: "action",
-        action: { type: "message", label: "最初から", text: "最初から" },
-      },
+      { type: "action", action: { type: "message", label: "次へ", text: "次へ" } },
+      { type: "action", action: { type: "message", label: "最初から", text: "最初から" } },
     ],
   };
 }
 
-// 無料テンプレ（あなたの口調に合わせて、落ち着いた導線）
 function freeParts({ gender, birth }) {
   return [
     `ユーザーさん、ようこそ。\nまずは無料で「オーラの傾向」を簡易鑑定します。\n\n性別：${gender}\n生年月日：${birth}\n\n深呼吸して、肩の力を抜いてください。`,
@@ -103,12 +74,12 @@ function freeParts({ gender, birth }) {
   ];
 }
 
-// Render疎通確認
+// 疎通確認（これ1回だけ）
 app.get("/", (req, res) => res.status(200).send("VER1-GENDER-BIRTH-20260104"));
 
-
+// Webhook
 app.post("/webhook", line.middleware({ channelSecret }), async (req, res) => {
-  // 先に200（タイムアウト回避）
+  // 先に200
   res.status(200).send("OK");
 
   try {
@@ -123,14 +94,15 @@ app.post("/webhook", line.middleware({ channelSecret }), async (req, res) => {
       const replyToken = event.replyToken;
       const text = (event.message.text || "").trim();
 
-      if (!replyToken) continue; // replyTokenがないイベントは返信できない
+      if (!replyToken) continue;
+
+      // userIdが取れない場合の最低限
       if (!userId) {
-        // userIdがない（まれ）場合は最低限返信だけ
         await reply(replyToken, [{ type: "text", text: "受信しました。" }]);
         continue;
       }
 
-      // 初回 or stateなしなら初期化
+      // 初回
       if (!userStateMap.has(userId)) resetUser(userId);
       const st = userStateMap.get(userId);
 
@@ -138,16 +110,12 @@ app.post("/webhook", line.middleware({ channelSecret }), async (req, res) => {
       if (text === "最初から") {
         resetUser(userId);
         await reply(replyToken, [
-          {
-            type: "text",
-            text: "最初から始めます。\n性別を教えてください。",
-            quickReply: quickReplyGender(),
-          },
+          { type: "text", text: "最初から始めます。\n性別を教えてください。", quickReply: quickReplyGender() },
         ]);
         continue;
       }
 
-      // ステップ分岐
+      // ここが「受信OK」ではなく会話導線になるポイント
       if (st.step === "WAIT_GENDER") {
         if (!["男性", "女性", "その他"].includes(text)) {
           await reply(replyToken, [
@@ -160,10 +128,7 @@ app.post("/webhook", line.middleware({ channelSecret }), async (req, res) => {
         userStateMap.set(userId, st);
 
         await reply(replyToken, [
-          {
-            type: "text",
-            text: "次に、生年月日を入力してください。\n例）1990-01-31",
-          },
+          { type: "text", text: "次に、生年月日を入力してください。\n例）1990-01-31" },
         ]);
         continue;
       }
@@ -187,7 +152,6 @@ app.post("/webhook", line.middleware({ channelSecret }), async (req, res) => {
         continue;
       }
 
-      // 無料テンプレの「次へ」進行
       if (st.step.startsWith("FREE_")) {
         if (text !== "次へ") {
           await reply(replyToken, [
@@ -208,7 +172,7 @@ app.post("/webhook", line.middleware({ channelSecret }), async (req, res) => {
             {
               type: "text",
               text:
-                "無料鑑定は以上です。\n\nこのあと有料で、悩みに合わせて深掘り鑑定も可能です。\n（準備中：恋愛/仕事/金運/生活）\n\n続ける場合は「最初から」でもう一度試せます。",
+                "無料鑑定は以上です。\n\nこのあと有料で、悩みに合わせて深掘り鑑定も可能です。\n（準備中：恋愛/仕事/金運/生活）\n\n続ける場合は「最初から」と送ってください。",
               quickReply: quickReplyNext(),
             },
           ]);
@@ -224,7 +188,6 @@ app.post("/webhook", line.middleware({ channelSecret }), async (req, res) => {
         continue;
       }
 
-      // DONE後の扱い
       if (st.step === "DONE") {
         await reply(replyToken, [
           { type: "text", text: "続ける場合は「最初から」と送ってください。", quickReply: quickReplyNext() },
@@ -232,7 +195,7 @@ app.post("/webhook", line.middleware({ channelSecret }), async (req, res) => {
         continue;
       }
 
-      // 万一未知の状態ならリセット
+      // 不明ならリセット
       resetUser(userId);
       await reply(replyToken, [
         { type: "text", text: "状態が不明になったため最初から始めます。\n性別を教えてください。", quickReply: quickReplyGender() },
