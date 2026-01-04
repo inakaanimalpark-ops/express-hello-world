@@ -10,12 +10,18 @@ const config = {
 
 const client = new line.Client(config);
 
-app.post("/webhook", line.middleware(config), (req, res) => {
-  // ✅ 先に即200（タイムアウト防止）
-  res.status(200).send("OK");
-
-  const events = req.body.events || [];
-  console.log("events length:", events.length);
+app.post(
+  "/webhook",
+  (req, res, next) => {
+    console.log(">>> HIT /webhook (before signature check)");
+    next();
+  },
+  line.middleware(config),
+  async (req, res) => {
+    res.status(200).send("OK");
+    // ここから先は非同期でOK（返信処理など）
+  }
+);
 
   (async () => {
     try {
