@@ -102,7 +102,8 @@ function freeParts({ gender, birth }) {
 }
 
 // Render疎通確認
-app.get("/", (req, res) => res.status(200).send("LINE webhook server is running."));
+app.get("/", (req, res) => res.status(200).send("VER1-GENDER-BIRTH-20260104"));
+
 
 app.post("/webhook", line.middleware({ channelSecret }), async (req, res) => {
   // 先に200（タイムアウト回避）
