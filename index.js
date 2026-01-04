@@ -2,40 +2,38 @@ const express = require("express");
 const line = require("@line/bot-sdk");
 
 const app = express();
-const PORT = process.env.PORT || 3000;
 
 const config = {
   channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN,
   channelSecret: process.env.LINE_CHANNEL_SECRET,
 };
 
-const client = new line.messagingApi.MessagingApiClient({
-  channelAccessToken: config.channelAccessToken,
-});
+const client = new line.Client(config);
 
-app.get("/", (req, res) => {
-  res.status(200).send("LINE webhook server is running.");
-});
-
+// 重要：/webhook で line.middleware を先に通す（署名検証）
 app.post("/webhook", line.middleware(config), async (req, res) => {
   try {
     const events = req.body.events || [];
-    await Promise.all(
-      events.map(async (event) => {
-        if (event.type !== "message" || event.message.type !== "text") return;
-        return client.replyMessage(event.replyToken, {
+    console.log("events length:", events.length);
+
+    for (const event of events) {
+      if (event.type === "message" && event.message && event.message.type === "text") {
+        await client.replyMessage(event.replyToken, {
           type: "text",
           text: `受信OK: ${event.message.text}`,
         });
-      })
-    );
+      }
+    }
+
     res.status(200).send("OK");
   } catch (err) {
-    console.error(err);
-    res.status(500).end();
+    console.error("webhook handler error:", err);
+    res.status(200).send("OK");
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+// Render疎通確認
+app.get("/", (req, res) => res.send("LINE webhook server is running."));
+
+const port = process.env.PORT || 3000;
+app.listen(port, () => console.log("listening on", port));
