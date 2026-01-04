@@ -10,23 +10,30 @@ const config = {
 
 const client = new line.Client(config);
 
-app.post("/webhook", line.middleware(config), async (req, res) => {
-  try {
-    const events = req.body.events || [];
-    console.log("events length:", events.length);
+app.post("/webhook", line.middleware(config), (req, res) => {
+  // ✅ 先に即200（タイムアウト防止）
+  res.status(200).send("OK");
 
-    for (const event of events) {
-      if (event.type === "message" && event.message?.type === "text") {
-        await client.replyMessage(event.replyToken, {
-          messages: [
-            {
-              type: "text",
-              text: `受信OK: ${event.message.text}`,
-            },
-          ],
-        });
+  const events = req.body.events || [];
+  console.log("events length:", events.length);
+
+  (async () => {
+    try {
+      for (const event of events) {
+        if (event.type === "message" && event.message?.type === "text") {
+          await client.replyMessage(event.replyToken, {
+            messages: [
+              { type: "text", text: `受信OK: ${event.message.text}` },
+            ],
+          });
+        }
       }
+    } catch (err) {
+      console.error("async handler error:", err?.body || err);
     }
+  })();
+});
+
 
     // ✅ ここで必ず200
     return res.status(200).send("OK");
