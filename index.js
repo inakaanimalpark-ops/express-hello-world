@@ -21,11 +21,13 @@ app.post("/webhook", line.middleware(config), (req, res) => {
     try {
       for (const event of events) {
         if (event.type === "message" && event.message?.type === "text") {
-          await client.replyMessage(event.replyToken, {
-            messages: [
-              { type: "text", text: `受信OK: ${event.message.text}` },
-            ],
-          });
+          await client.replyMessage(event.replyToken, [
+  {
+    type: "text",
+    text: `受信OK: ${event.message.text}`,
+  },
+]);
+
         }
       }
     } catch (err) {
