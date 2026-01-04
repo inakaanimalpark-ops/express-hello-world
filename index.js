@@ -1,4 +1,6 @@
-const express = require("express");
+const express = require("express");console.log("=== VER1 CODE ACTIVE 2026-01-04 21:xx ===");
+app.get("/", (req, res) => res.status(200).send("VER1 ACTIVE 2026-01-04"));
+
 const line = require("@line/bot-sdk");
 
 const app = express();
